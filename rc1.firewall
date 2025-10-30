@@ -1,0 +1,64 @@
+#!/bin/sh
+#################################################################################
+# rc.firewall - Packet Filter Firewall Script for CSE 548 (ASU)
+# Configured for Jared Peterson - Task 2 (Stateless Firewall)
+#################################################################################
+
+# 1. Network Configuration
+Internet_IP="10.0.1.69"
+Internet_IP_RANGE="10.0.1.0/24"
+Internet_BCAST_ADRESS="10.0.1.255"
+Internet_IFACE="ens3"         # NAT/Internet-facing interface
+
+Client_NET_IP="10.0.2.1"
+Client_NET_IP_RANGE="10.0.2.0/24"
+Client_NET_BCAST_ADRESS="10.0.2.255"
+Client_NET_IFACE="ens4"       # Client-facing interface
+
+LO_IFACE="lo"
+LO_IP="127.0.0.1"
+WEB_IP_ADDRESS="10.0.2.1"
+NAT_WEB_IP_ADDRESS="10.0.2.1"
+
+IPTABLES="/sbin/iptables"
+
+echo "Enabling IP forwarding..."
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+echo "Flushing existing iptables rules..."
+$IPTABLES -F
+$IPTABLES -X
+$IPTABLES -t nat -F
+$IPTABLES -t nat -X
+
+# Default Whitelist Policies
+$IPTABLES -P INPUT DROP
+$IPTABLES -P OUTPUT DROP
+$IPTABLES -P FORWARD DROP
+
+# Allow loopback traffic
+$IPTABLES -A INPUT -i $LO_IFACE -j ACCEPT
+$IPTABLES -A OUTPUT -o $LO_IFACE -j ACCEPT
+
+# Allow established/related traffic
+$IPTABLES -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+$IPTABLES -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+$IPTABLES -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+# Allow HTTP from client to gateway
+$IPTABLES -A INPUT -i $Client_NET_IFACE -s $Client_NET_IP_RANGE -d $WEB_IP_ADDRESS -p tcp --dport 80 -j ACCEPT
+$IPTABLES -A OUTPUT -o $Client_NET_IFACE -d $Client_NET_IP_RANGE -s $WEB_IP_ADDRESS -p tcp --sport 80 -j ACCEPT
+
+# Block ping (ICMP echo-request) from client to gateway
+$IPTABLES -A INPUT -i $Client_NET_IFACE -s $Client_NET_IP_RANGE -d $Client_NET_IP -p icmp --icmp-type echo-request -j DROP
+
+# Allow client to ping 8.8.8.8 only
+$IPTABLES -A FORWARD -i $Client_NET_IFACE -s $Client_NET_IP_RANGE -d 8.8.8.8 -p icmp --icmp-type echo-request -j ACCEPT
+
+# NAT setup: Masquerade outbound traffic to Internet
+$IPTABLES -t nat -A POSTROUTING -o $Internet_IFACE -j MASQUERADE
+
+# Allow gateway itself to ping out (for testing)
+$IPTABLES -A OUTPUT -p icmp -j ACCEPT
+
+echo "Firewall configuration applied successfully!"
