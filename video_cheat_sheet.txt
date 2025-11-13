@@ -1,0 +1,115 @@
+Steps for project 2 video
+Step1 eval criteria #6
+Go to POX directory:
+cd /home/ubuntu/pox
+open l2firewall.config
+write below to the file
+id,mac_0,mac_1
+1,00:00:00:00:00:01,00:00:00:00:00:02
+2,00:00:00:00:00:02,00:00:00:00:00:04
+save and exit
+
+step 2 criteria 3,4,5,7,8
+open l3firewall.config
+7,any,any,192.168.2.10,192.168.2.30,1,1,icmp
+8,any,any,192.168.2.20,192.168.2.40,1,1,icmp
+9,any,any,192.168.2.20,any,any,80,tcp
+10,any,any,192.168.2.10,192.168.2.20,any,any,tcp
+11,any,any,192.168.2.10,192.168.2.20,any,any,udp
+save and exit.  Each rule from left to right. Priority, source mac, dest mac, source ip, dest ip, source port, dest port, porotocol type
+for ICPM it doesn’t use ports so we just put 1 as a placeholder.
+For http traffic we use port 80 by default and its tcp protocol
+For udp we say any port so udp over any port is bloecked.  
+
+Step 3 open pox and leave open for video. This is controller 1
+cd /home/ubuntu/pox
+
+sudo ./pox.py openflow.of_01 --port=6655 \
+    forwarding.l2_learning \
+    forwarding.L3Firewall \
+    --l2config=l2firewall.config \
+    --l3config=l3firewall.config
+
+
+Step 4 mininet create 4 hosts 1 controller eval #1
+sudo mn --topo=single,4 \
+    --controller=remote,ip=127.0.0.1,port=6655 \
+    --switch=ovsk --mac
+
+step 5: assign the ips eval #2
+containernet> h1 ifconfig h1-eth0 192.168.2.10/24 up
+containernet> h2 ifconfig h2-eth0 192.168.2.20/24 up
+containernet> h3 ifconfig h3-eth0 192.168.2.30/24 up
+containernet> h4 ifconfig h4-eth0 192.168.2.40/24 up
+
+open another window and watch the flows after the tests.
+sudo ovs-ofctl dump-flows s1
+You will use this after eac
+
+6. Evaluation Tests (Steps 3–8)
+Record yourself running each block test + showing the flows.
+
+6.1 Test ICMP block (10 ? 30)
+(Evaluation #3)
+containernet> h1 ping -c 3 192.168.2.30
+Expected ? 100% packet loss.
+Check flows:
+sudo ovs-ofctl dump-flows s1
+Look for a DROP rule with src=192.168.2.10, dst=192.168.2.30.
+
+6.2 Test ICMP block (20 ? 40)
+(Evaluation #4)
+containernet> h2 ping -c 3 192.168.2.40
+Check flows again:
+sudo ovs-ofctl dump-flows s1
+
+6.3 Test HTTP block from 192.168.2.20
+(Evaluation #5)
+Start HTTP server on h3:
+containernet> h3 python3 -m http.server 80 &
+From h2 (the blocked source):
+containernet> h2 wget -O- 192.168.2.30
+# OR
+containernet> h2 curl 192.168.2.30
+Expected ? connection hangs/fails.
+Check flows:
+sudo ovs-ofctl dump-flows s1
+Look for:
+nw_src=192.168.2.20 tp_dst=80 tcp actions=drop
+
+6.4 Test L2 MAC block (MAC 02 ? MAC 04)
+(Evaluation #6)
+containernet> h2 ping -c 3 192.168.2.40
+Check flows:
+sudo ovs-ofctl dump-flows s1
+Shows a high-priority DROP based on MAC addresses.
+
+6.5 Test TCP block (10 ? 20)
+(Evaluation #7)
+containernet> h1 hping3 -c 5 192.168.2.20 -S -p 80
+Check flows:
+sudo ovs-ofctl dump-flows s1
+
+6.6 Test UDP block (10 ? 20)
+(Evaluation #8)
+containernet> h1 hping3 -2 -c 5 192.168.2.20 -p 53
+Check flows:
+sudo ovs-ofctl dump-flows s1
+
+7. (Optional) Extra OVS commands for your video
+sudo ovs-vsctl show
+sudo ovs-vsctl list-ports s1
+sudo ovs-ofctl show s1
+sudo ovs-ofctl dump-ports-desc s1
+sudo ovs-appctl bridge/dump-flows s1
+
+? DONE — This meets ALL rubric requirements
+? 1 controller (matching updated instructor guidance)
+? 4-container topology
+? IP assignments
+? L2 and L3 rule modifications
+? ICMP/TCP/UDP/HTTP blocking demonstrations
+? OVS flow verification
+
+If you want, I can also write you a VIDEO SCRIPT you can literally read word-for-word while recording (makes the video super clean and guarantees full credit).
+
