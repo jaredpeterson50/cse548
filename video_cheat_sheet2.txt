@@ -1,0 +1,80 @@
+Steps for project 2 video
+Step1 eval criteria #6
+Go to POX directory:
+cd /home/ubuntu/pox
+open l2firewall.config
+write below to the file
+id,mac_0,mac_1
+1,00:00:00:00:00:02,00:00:00:00:00:04
+save and exit
+
+step 2 criteria 3,4,5,7,8
+open l3firewall.config
+1,any,any,192.168.2.10,192.168.2.30,1,1,icmp
+2,any,any,192.168.2.20,192.168.2.40,1,1,icmp
+3,any,any,192.168.2.20,any,any,80,tcp
+4,any,any,192.168.2.10,192.168.2.20,any,any,tcp
+5,any,any,192.168.2.10,192.168.2.20,any,any,udp
+
+save and exit.  Each rule from left to right. Priority, source mac, dest mac, source ip, dest ip, source port, dest port, porotocol type
+for ICPM it doesn’t use ports so we just put 1 as a placeholder.
+For http traffic we use port 80 by default and its tcp protocol
+For udp we say any port so udp over any port is bloecked.  
+
+Step 3 open pox and leave open for video. This is controller 1
+cd /home/ubuntu/pox
+
+sudo ./pox.py openflow.of_01 --port=6655 \
+    forwarding.l2_learning \
+    forwarding.L3Firewall \
+    --l2config=l2firewall.config \
+    --l3config=l3firewall.config
+
+
+Step 4 mininet create 4 hosts 1 controller eval #1
+sudo mn --topo=single,4 \
+    --controller=remote,ip=127.0.0.1,port=6655 \
+    --switch=ovsk --mac
+
+step 5: assign the ips eval #2  in the containernet promtp
+h1 ifconfig h1-eth0 192.168.2.10/24 up
+h2 ifconfig h2-eth0 192.168.2.20/24 up
+h3 ifconfig h3-eth0 192.168.2.30/24 up
+h4 ifconfig h4-eth0 192.168.2.40/24 up
+h1 route add default dev h1-eth0
+h2 route add default dev h2-eth0
+h3 route add default dev h3-eth0
+h4 route add default dev h4-eth0
+
+open another window and watch the flows after the tests.
+sudo ovs-ofctl dump-flows s1
+
+step 6 Evaluation Tests
+Record yourself running each block test then the flows
+
+(Evaluation #3) .10 to .30 icpm
+containernet> h1 ping -c 3 192.168.2.30
+
+(Evaluation #4) .20 to .30 icpm
+containernet> h2 ping -c 3 192.168.2.40
+
+(Evaluation #5)
+containernet> h2 curl 192.168.2.30
+going to hang check dump-flow for .20
+
+6.4 Test L2 MAC block (MAC 02 ? MAC 04)
+(Evaluation #6)
+containernet> h2 ping h4
+
+ping resolves to layer2 so in the dump you will see droped packets from the mac address rule 
+
+6.5 Test TCP block (10 ? 20)
+(Evaluation #7)
+containernet> h1 hping3 -c 5 192.168.2.20 -S -p 80
+Check flows:
+sudo ovs-ofctl dump-flows s1
+
+6.6 Test UDP block (10 ? 20)
+(Evaluation #8)
+containernet> h1 hping3 -2 -c 5 192.168.2.20 -p 53
+
